@@ -24,7 +24,7 @@ def main():
     args = parser.parse_args()
 
     # padding 
-    bs_id_str = '%04d' % bs_id
+    bs_id_str = '%04d' % args.bs_id
 
     # hard coded parameters
     # mhg_cs = [(2, '00'), (4, '005')]
@@ -33,7 +33,7 @@ def main():
     replicate_nr = 10
     
     for (mhg, cs) in mhg_cs:
-        subsample_kraken2(kraken_path, bs_id_str, mhg, cs, subsampling_fractions, replicate_nr, subsample_path)
+        subsample_kraken2(args.kraken_path, bs_id_str, mhg, cs, subsampling_fractions, replicate_nr, args.subsample_path)
 
 if __name__ == "__main__":
     main()
