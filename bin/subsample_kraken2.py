@@ -27,7 +27,8 @@ def main():
     bs_id_str = '%04d' % bs_id
 
     # hard coded parameters
-    mhg_cs = [(2, '00'), (4, '005')]
+    # mhg_cs = [(2, '00'), (4, '005')]
+    mhg_cs = [(2, '00')]
     subsampling_fractions = [round(x, 2) for x in np.arange(0.1, 1, 0.1)]
     replicate_nr = 10
     
