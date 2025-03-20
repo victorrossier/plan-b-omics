@@ -19,7 +19,7 @@ def main():
     #Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--kraken_path')
-    parser.add_argument('--bs_id')
+    parser.add_argument('--bs_id', type=int)
     parser.add_argument('--subsample_path')
     args = parser.parse_args()
 
