@@ -50,9 +50,12 @@ import pandas as pd
 #     ped_df = ped_df.join(pd.DataFrame(ped_mat))
 #     ped_df.to_csv('{}{}_{}.ped'.format(plink_path, prefix, f'{batch_j:03}'), header=False, index=False, sep='\t')
 
-def write_ped_pop(
+def write_ped_prob(
     plink_path, prefix, pop, chunk_bs_ids, batch_j, chunk_size, prob_threshold):
 
+    # index of column with first bs_id (skipping metadata columns)
+    bgs_col_idx = 5
+    
     bim_like = pd.read_csv('{}{}.bim_like'.format(plink_path, prefix), sep='\t', header=None)
     bgs_file = '{}{}_{}.bgs'.format(plink_path, prefix, pop)
     aa_prob_file = '{}{}_{}_AA.prob'.format(plink_path, prefix, pop)
@@ -70,17 +73,17 @@ def write_ped_pop(
 
     # check we have the same bs ids in header than in batch
     header_bsids = inf.readline()
-    assert header_bsids.rstrip().split(',')[3:][start_j: start_j + len(chunk_bs_ids)] == chunk_bs_ids, 'bs_id mismatch'
+    assert header_bsids.rstrip().split(',')[bgs_col_idx:][start_j: start_j + len(chunk_bs_ids)] == chunk_bs_ids, 'bs_id mismatch'
     inf_aa.readline()
     inf_ar.readline()
     inf_rr.readline()
 
     # iterate snps and colonies
     for i in tqdm(range(snp_nr)):
-        ref_numbers = inf.readline().rstrip().split(',')[3:]
-        aa_probs = inf_aa.readline().rstrip().split(',')[3:]
-        ar_probs = inf_ar.readline().rstrip().split(',')[3:]
-        rr_probs = inf_rr.readline().rstrip().split(',')[3:]
+        ref_numbers = inf.readline().rstrip().split(',')[bgs_col_idx:]
+        aa_probs = inf_aa.readline().rstrip().split(',')[bgs_col_idx:]
+        ar_probs = inf_ar.readline().rstrip().split(',')[bgs_col_idx:]
+        rr_probs = inf_rr.readline().rstrip().split(',')[bgs_col_idx:]
 
         for j in range(start_j, start_j + len(chunk_bs_ids)):
             ref_nr = ref_numbers[j]
@@ -119,6 +122,65 @@ def write_ped_pop(
     })
     ped_df = ped_df.join(pd.DataFrame(ped_mat))
     ped_df.to_csv('{}{}_{}_{}.ped'.format(plink_path, prefix, pop, batch_j), header=False, index=False, sep='\t')
+
+
+def write_ped_woprob(
+    plink_path, prefix, pop, chunk_bs_ids, batch_j, chunk_size):
+    
+    # index of column with first bs_id (skipping metadata columns)
+    bgs_col_idx = 5
+    
+    bim_like = pd.read_csv('{}{}.bim_like'.format(plink_path, prefix), sep='\t', header=None)
+    bgs_file = '{}{}_{}.bgs'.format(plink_path, prefix, pop)
+    snp_nr = len(bim_like)
+    
+    start_j = batch_j * chunk_size
+    ped_mat = np.full((len(chunk_bs_ids), 2 * snp_nr), '', dtype='U1')
+    
+    inf = open(bgs_file, 'r')
+
+    # check we have the same bs ids in header than in batch
+    header_bsids = inf.readline()
+    assert header_bsids.rstrip().split(',')[bgs_col_idx:][start_j: start_j + len(chunk_bs_ids)] == chunk_bs_ids, 'bs_id mismatch'
+
+    # iterate snps and colonies
+    for i in tqdm(range(snp_nr)):
+        ref_numbers = inf.readline().rstrip().split(',')[bgs_col_idx:]
+
+        for j in range(start_j, start_j + len(chunk_bs_ids)):
+            ref_nr = ref_numbers[j]
+
+            # homozygote reference
+            if (ref_nr == '2'):
+                ped_mat[j - start_j, 2 * i] = bim_like.iloc[i, 5]
+                ped_mat[j - start_j, 2 * i + 1] = bim_like.iloc[i, 5]
+            # heterozygote
+            elif (ref_nr == '1'):
+                ped_mat[j - start_j, 2 * i] = bim_like.iloc[i, 5]
+                ped_mat[j - start_j, 2 * i + 1] = bim_like.iloc[i, 4]
+            # homozygote alternative
+            elif (ref_nr == '0'):
+                ped_mat[j - start_j, 2 * i] = bim_like.iloc[i, 4]
+                ped_mat[j - start_j, 2 * i + 1] = bim_like.iloc[i, 4]
+            # below prob_threshold
+            elif ref_nr in {'0', '1', '2'}:
+                ped_mat[j - start_j, 2 * i] = '0'
+                ped_mat[j - start_j, 2 * i + 1] = '0'
+            else: 
+                print('ERROR')
+            
+    inf.close()
+
+    ped_df = pd.DataFrame({
+        'FID': ['0'] * len(chunk_bs_ids), 
+        'IID': chunk_bs_ids,
+        'PID': ['0'] * len(chunk_bs_ids),
+        'MID': ['0'] * len(chunk_bs_ids),
+        'SEX': ['0'] * len(chunk_bs_ids), 
+        'PHENOTYPE': ['-9'] * len(chunk_bs_ids)
+    })
+    ped_df = ped_df.join(pd.DataFrame(ped_mat))
+    ped_df.to_csv('{}{}_{}_{}.ped'.format(plink_path, prefix, pop, batch_j), header=False, index=False, sep='\t')
     
 def main():
     #Parse arguments
@@ -134,9 +196,12 @@ def main():
 
     chunk_bs_ids = args.chunk_bs_ids.rstrip().split(',')
     batch_j = args.batch_id - 1
-    
-    write_ped_pop(args.plink_path, args.prefix, args.pop, chunk_bs_ids, batch_j, args.chunk_size, args.prob_threshold)
-    # write_ped(args.bim_file, chunk_bs_ids, args.snp_nr, args.bgs_file, batch_j, args.chunk_size, args.plink_path, args.prefix)
 
+    if args.prob_threshold > 0:
+        write_ped_prob(args.plink_path, args.prefix, args.pop, chunk_bs_ids, batch_j, args.chunk_size, args.prob_threshold)
+    # w/o .prob files
+    else:
+        write_ped_woprob(args.plink_path, args.prefix, args.pop, chunk_bs_ids, batch_j, args.chunk_size)
+        
 if __name__ == "__main__":
     main()
